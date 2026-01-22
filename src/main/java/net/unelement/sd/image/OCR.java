@@ -1,8 +1,5 @@
 package net.unelement.sd.image;
 
-import net.unelement.sd.ffmpeg.EofEvent;
-import net.unelement.sd.ffmpeg.FFEvent;
-import net.unelement.sd.ffmpeg.FFListener;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacv.Java2DFrameConverter;
 import org.bytedeco.javacv.LeptonicaFrameConverter;
@@ -32,6 +29,8 @@ public class OCR implements Runnable {
     private volatile boolean done;
     private BufferedImage image;
     private long microseconds;
+    private int currentFrame;
+    private int frameCount;
 
     public OCR(String tessPath, String lang) {
         this.tessPath = tessPath;
@@ -54,10 +53,13 @@ public class OCR implements Runnable {
         thread.start();
     }
 
-    public void stopThread() {
+    private void stopThread() {
         if(thread != null && thread.isAlive()) {
             thread.interrupt();
         }
+    }
+
+    public void interruptThread() {
         running = false;
     }
 
@@ -65,9 +67,11 @@ public class OCR implements Runnable {
         return api.Init(tessPath, lang) == 0;
     }
 
-    public void load(BufferedImage image, long microseconds) {
+    public void load(BufferedImage image, long microseconds, int currentFrame, int frameCount) {
         this.image = image;
         this.microseconds = microseconds;
+        this.currentFrame = currentFrame;
+        this.frameCount = frameCount;
         done = false;
     }
 
@@ -76,15 +80,21 @@ public class OCR implements Runnable {
         api.SetImage(pix);
 
         outText = api.GetUTF8Text();
-        fireOcrEvent(new OCREvent(outText.getString(), microseconds));
+        fireOcrEvent(new OCREvent(outText.getString(), microseconds, currentFrame, frameCount));
 
         done = true;
+
+        if(!running){
+            stopThread();
+        }
     }
 
     public void dispose(){
         api.End();
-        outText.deallocate();
-        pixDestroy(pix); // <- cause double free or corrupted (out) in leptonica
+        if(outText != null){
+            outText.deallocate();
+            pixDestroy(pix); // <- cause double free or corrupted (out) in leptonica
+        }
     }
 
     @Override

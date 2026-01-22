@@ -29,7 +29,7 @@ public class SubDetect {
     public static class SubDetectFrame extends JFrame {
 
         private final VideoViewer videoViewer;
-        private final PositionView positionView;
+        private final ProgressPanel progressPanel;
         private final OCR ocr;
         private SubtitleEvent subtitleEvent;
         private final SrtSubtitles srtSubtitles;
@@ -50,6 +50,8 @@ public class SubDetect {
             getContentPane().setLayout(new BorderLayout());
             getContentPane().add(createToolBar(), BorderLayout.NORTH);
             getContentPane().add(contentPane, BorderLayout.CENTER);
+            progressPanel = new ProgressPanel();
+            getContentPane().add(progressPanel, BorderLayout.SOUTH);
 
             JPanel leftPane = new JPanel(new BorderLayout());
             JPanel rightPane = new JPanel();
@@ -60,18 +62,18 @@ public class SubDetect {
             contentPane.add(leftPane);
             contentPane.add(rightPane);
 
-            videoViewer = new VideoViewer(ocr);
-            positionView = new PositionView(videoViewer);
+            videoViewer = new VideoViewer(ocr, progressPanel);
+
             leftPane.add(videoViewer, BorderLayout.CENTER);
-            leftPane.add(positionView, BorderLayout.SOUTH);
 
             addWindowListener(new WindowAdapter() {
                 @Override
                 public void windowClosing(WindowEvent e) {
                     super.windowClosing(e);
 
-                    ocr.stopThread();
+                    ocr.interruptThread();
                     ocr.dispose();
+                    progressPanel.dispose();
                 }
             });
 
@@ -180,7 +182,7 @@ public class SubDetect {
             private BufferedImage image;
             private final FFMpeg ff;
 
-            public VideoViewer(OCR ocr){
+            public VideoViewer(OCR ocr, ProgressPanel progressPanel) {
                 image = null;
 
                 ff = new FFMpeg();
@@ -194,7 +196,9 @@ public class SubDetect {
 
                         // Create a cleaned image
                         BufferedImage im = ImageCompute.compute(event.getImage(), Color.white, event.getImage().getWidth(), event.getImage().getHeight());
-                        ocr.load(im, currentTime);
+                        ocr.load(im, currentTime, currentFrame, ff.getMediaFrameCount());
+
+                        progressPanel.updateValues(currentFrame + 1, ff.getMediaFrameCount());
 
                         repaint();
                     }
@@ -262,67 +266,85 @@ public class SubDetect {
             }
         }
 
-        public static class PositionView extends JPanel {
+        public static class ProgressPanel extends JPanel implements Runnable {
 
-            private int position;
-            private final JSlider slider;
-            private final JTextField tfPosition;
+            private final JProgressBar progressBar;
+            private final JLabel lblCurFrame;
+            private final JLabel lblTotalFrame;
+            private int currentFrame;
+            private int frameCount;
 
-            public PositionView(VideoViewer videoViewer){
-                position = 0;
-                slider = new JSlider();
-                slider.addChangeListener(e -> {
-                    double fps = videoViewer.getFps();
-                    if(videoViewer.getFFMpeg().isReady() && fps != 0d){
-                        position = slider.getValue();
-                        long sTime = Math.round(position / Math.max(1d, fps));
-                        videoViewer.getFFMpeg().setStartTime(sTime * 1_000_000L - 10);
-                        videoViewer.getFFMpeg().setEndTime(sTime * 1_000_000L);
-                        videoViewer.getFFMpeg().play();
+            private final Thread thread;
+            private volatile boolean updateRequest;
+
+            public ProgressPanel(){
+                progressBar = new JProgressBar();
+                lblCurFrame = new JLabel("0");
+                JLabel lblSlash = new JLabel("/");
+                lblTotalFrame = new JLabel("0");
+                JPanel pEast = new JPanel(null);
+
+                progressBar.setMinimum(0);
+                currentFrame = 0;
+                frameCount = 0;
+                updateRequest = false;
+
+                thread = new Thread(this);
+                thread.start();
+
+                lblCurFrame.setHorizontalAlignment(JLabel.CENTER);
+                lblSlash.setHorizontalAlignment(JLabel.CENTER);
+                lblTotalFrame.setHorizontalAlignment(JLabel.CENTER);
+
+                pEast.setPreferredSize(new Dimension(222, 22));
+                pEast.add(lblCurFrame);
+                pEast.add(lblSlash);
+                pEast.add(lblTotalFrame);
+
+                lblCurFrame.setSize(100, 22);
+                lblSlash.setSize(22, 22);
+                lblTotalFrame.setSize(100, 22);
+
+                lblCurFrame.setLocation(0, 0);
+                lblSlash.setLocation(100, 0);
+                lblTotalFrame.setLocation(122, 0);
+
+                lblCurFrame.setVisible(true);
+                lblSlash.setVisible(true);
+                lblTotalFrame.setVisible(true);
+
+                setLayout(new BorderLayout());
+                add(pEast, BorderLayout.EAST);
+                add(progressBar, BorderLayout.CENTER);
+
+
+            }
+
+            public void dispose(){
+                if(thread != null && thread.isAlive()){
+                    thread.interrupt();
+                }
+            }
+
+            public void updateValues(int cur, int total){
+                lblCurFrame.setText(Integer.toString(cur));
+                lblTotalFrame.setText(Integer.toString(total));
+                currentFrame = cur;
+                frameCount = total;
+                updateRequest = true; // update JProgress
+            }
+
+            @Override
+            public void run() {
+                while(true){
+                    if(updateRequest){
+                        progressBar.setMaximum(frameCount);
+                        progressBar.setValue(currentFrame);
+                        updateRequest = false;
                     }
-                });
-                slider.setMinimum(0);
-                tfPosition = new JTextField("0");
-                tfPosition.setHorizontalAlignment(JTextField.CENTER);
-                JButton btnPosition = new JButton("Go to position");
-                btnPosition.addActionListener(e -> {
-                    try{
-                        double fps = videoViewer.getFps();
-                        if(videoViewer.getFFMpeg().isReady() && fps != 0d){
-                            position = Integer.parseInt(tfPosition.getText());
-                            slider.setValue(position);
-                            long sTime = Math.round(position / Math.max(1d, fps));
-                            videoViewer.getFFMpeg().setStartTime(sTime * 1_000_000L - 10);
-                            videoViewer.getFFMpeg().setEndTime(sTime * 1_000_000L);
-                            videoViewer.getFFMpeg().play();
-                        }
-                    }catch(Exception ex){
-                        JOptionPane.showMessageDialog(new JFrame(), ex.getMessage());
-                    }
-                });
-
-                JPanel topPanel = new JPanel(new GridLayout(1, 2));
-                topPanel.add(tfPosition);
-                topPanel.add(btnPosition);
-
-                setLayout(new GridLayout(2, 1));
-                add(topPanel);
-                add(slider);
+                }
             }
 
-            public void updatePosition(int position){
-                this.position = position;
-                slider.setValue(position);
-                tfPosition.setText(String.valueOf(position));
-            }
-
-            public int getPosition(){
-                return position;
-            }
-
-            public void updateMaxFrame(int frame){
-                slider.setMaximum(frame);
-            }
         }
     }
 }
