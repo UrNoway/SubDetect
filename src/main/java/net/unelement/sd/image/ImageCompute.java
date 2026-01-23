@@ -71,11 +71,6 @@ public class ImageCompute {
     private ImageCompute() { }
 
     public static BufferedImage colorFilter(Color preservedColor, BufferedImage image) {
-        Color invertedPresetColor = new Color(
-                255 - preservedColor.getRed(),
-                255 - preservedColor.getGreen(),
-                255 - preservedColor.getBlue()
-        );
 
         // Create values for the threshold min/max on preserved value
         // that can't be a lonely value but multiple blurred values
@@ -110,9 +105,9 @@ public class ImageCompute {
                 Color pixel = new Color(rgb);
 
                 if(pixel.getRed() >= t1.getRed() && pixel.getRed() <= t2.getRed()){
-                    im.setRGB(x, y, preservedColor.getRGB());
+                    im.setRGB(x, y, Color.black.getRGB()); // preserved
                 }else{
-                    im.setRGB(x, y, invertedPresetColor.getRGB());
+                    im.setRGB(x, y, Color.white.getRGB());
                 }
 
             }

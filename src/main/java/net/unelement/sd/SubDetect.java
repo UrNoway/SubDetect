@@ -13,6 +13,8 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public class SubDetect {
@@ -31,6 +33,7 @@ public class SubDetect {
         private final VideoViewer videoViewer;
         private final ProgressPanel progressPanel;
         private final OCR ocr;
+        private final Map<Long, String> detected;
         private SubtitleEvent subtitleEvent;
         private final SrtSubtitles srtSubtitles;
 
@@ -43,6 +46,7 @@ public class SubDetect {
             ocr = new OCR("/home/yves/tessdata/tessdata");
             if(!ocr.init()) throw new RuntimeException("Init not done!");
             ocr.startThread();
+            detected = new HashMap<>();
             srtSubtitles = new SrtSubtitles();
 
             JPanel contentPane = new JPanel(new GridLayout(1, 2, 2, 2));
@@ -79,15 +83,8 @@ public class SubDetect {
 
             ocr.addOcrListener((event) -> {
                 String text = event.getText();
-                if(subtitleEvent == null && !text.isEmpty()){
-                    subtitleEvent = new SubtitleEvent();
-                    subtitleEvent.setMicrosStart(event.getMicroseconds());
-                    subtitleEvent.setText(text);
-                }else if(subtitleEvent != null && text.isEmpty()){
-                    subtitleEvent.setMicrosEnd(event.getMicroseconds());
-                    srtSubtitles.getSubtitleEvents().add(subtitleEvent);
-
-                    subtitleEvent = null;
+                if(!text.isEmpty()){
+                    detected.put(event.getMicroseconds(), text);
                 }
             });
 
@@ -95,17 +92,17 @@ public class SubDetect {
                 @Override
                 public void endOfFile(EofEvent event) {
                     JOptionPane.showMessageDialog(new JFrame(), "End of file");
-                    JFileChooser chooser = new JFileChooser();
-                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                    chooser.setDialogType(JFileChooser.SAVE_DIALOG);
-                    chooser.setDialogTitle("Choose a file");
-
-                    int z = chooser.showSaveDialog(null);
-                    if (z == JFileChooser.APPROVE_OPTION) {
-                        String path = chooser.getSelectedFile().getAbsolutePath();
-                        srtSubtitles.writeSRT(path);
-                        srtSubtitles.getSubtitleEvents().clear();
-                    }
+//                    JFileChooser chooser = new JFileChooser();
+//                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+//                    chooser.setDialogType(JFileChooser.SAVE_DIALOG);
+//                    chooser.setDialogTitle("Choose a file");
+//
+//                    int z = chooser.showSaveDialog(null);
+//                    if (z == JFileChooser.APPROVE_OPTION) {
+//                        String path = chooser.getSelectedFile().getAbsolutePath();
+//                        srtSubtitles.writeSRT(path);
+//                        srtSubtitles.getSubtitleEvents().clear();
+//                    }
                 }
             });
         }

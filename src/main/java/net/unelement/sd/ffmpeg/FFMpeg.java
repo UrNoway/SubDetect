@@ -183,20 +183,12 @@ public class FFMpeg implements Runnable {
             while (!Thread.interrupted()) {
                 if(running){
 
-                    //==============================================
-                    // END OF FILE (EOF) - AREA START
-                    //==============================================
-
                     positionCounter = Math.max(positionCounter, grabber.getFrameNumber());
                     if(grabber.getFrameNumber() < positionCounter){
                         stop();
                         positionCounter = -1;
-                        fireEofEvent(new EofEvent(grabber.getTimestamp()));
+                        //fireEofEvent(new EofEvent(grabber.getTimestamp()));
                     }
-
-                    //==============================================
-                    // END OF FILE (EOF) - AREA END
-                    //==============================================
 
                     //==============================================
                     // DESIRED START TRIGGER - AREA START
