@@ -9,6 +9,7 @@ import org.bytedeco.tesseract.TessBaseAPI;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 
@@ -36,7 +37,8 @@ public class ImageCompute {
             // Transform the image
             BufferedImage image = ImageCompute.compute(
                     icon.getImage(), Color.white,
-                    icon.getIconWidth(), icon.getIconHeight()
+                    icon.getIconWidth(), icon.getIconHeight(),
+                    new BlockArea(true, true, true)
             );
 
             /*
@@ -128,6 +130,27 @@ public class ImageCompute {
         return im;
     }
 
+    public static BufferedImage areaFilter(BlockArea area, BufferedImage image) {
+        BufferedImage im = new BufferedImage(
+                image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+
+        Graphics2D g2d = im.createGraphics();
+        g2d.setColor(Color.white);
+
+        double h = ((double)image.getHeight()) / 3d;
+        double w = image.getWidth();
+
+        g2d.drawImage(image, 0,0,null);
+
+        if(!area.isBottom()) g2d.fill(new Rectangle2D.Double(0d, h*2, w, h));
+        if(!area.isTop()) g2d.fill(new Rectangle2D.Double(0d, 0d, w, h));
+        if(!area.isMiddle()) g2d.fill(new Rectangle2D.Double(0d, h*1, w, h));
+
+        g2d.dispose();
+
+        return im;
+    }
+
     // https://stackoverflow.com/questions/18710560/how-to-convert-colors-to-grayscale-in-java-with-just-the-java-io-library
     public static Color grayFilter(Color color) {
         int red = color.getRed();
@@ -151,10 +174,12 @@ public class ImageCompute {
     }
 
     public static BufferedImage compute(Image image, Color textColor,
-                                        int imageWidth, int imageHeight) {
+                                        int imageWidth, int imageHeight,
+                                        BlockArea area) {
         Image im;
         im = grayFilter(toBufferedImage(image, imageWidth, imageHeight), imageWidth, imageHeight);
         im = colorFilter(grayFilter(textColor), toBufferedImage(im, imageWidth, imageHeight));
+        im = areaFilter(area, toBufferedImage(im, imageWidth, imageHeight));
         return toBufferedImage(im, imageWidth, imageHeight);
     }
 

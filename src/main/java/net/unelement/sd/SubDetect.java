@@ -5,6 +5,8 @@ import net.unelement.sd.ffmpeg.*;
 import net.unelement.sd.ffmpeg.event.VideoEvent;
 import net.unelement.sd.ffmpeg.listener.VideoListener;
 import net.unelement.sd.grid.XTablePanel;
+import net.unelement.sd.image.BlockArea;
+import net.unelement.sd.image.BlockAreaRenderer;
 import net.unelement.sd.image.ImageCompute;
 import net.unelement.sd.image.OCR;
 import net.unelement.sd.subtitle.SrtSubtitles;
@@ -43,6 +45,7 @@ public class SubDetect {
         private final XTablePanel xTablePanel;
         private final OCR ocr;
         private final Map<Long, String> detected;
+        private BlockArea lastBlockArea;
         private SubtitleEvent subtitleEvent;
         private final SrtSubtitles srtSubtitles;
         private TextValidation validate;
@@ -57,14 +60,17 @@ public class SubDetect {
             if(!ocr.init()) throw new RuntimeException("Init not done!");
             ocr.startThread();
             detected = new HashMap<>();
+
             srtSubtitles = new SrtSubtitles();
+            progressPanel = new ProgressPanel();
+            videoViewer = new VideoViewer(ocr, progressPanel);
+            xTablePanel = new XTablePanel();
 
             JPanel contentPane = new JPanel(new GridLayout(1, 2, 2, 2));
 
             getContentPane().setLayout(new BorderLayout());
             getContentPane().add(createToolBar(), BorderLayout.NORTH);
             getContentPane().add(contentPane, BorderLayout.CENTER);
-            progressPanel = new ProgressPanel();
             getContentPane().add(progressPanel, BorderLayout.SOUTH);
 
             JPanel leftPane = new JPanel(new BorderLayout());
@@ -75,9 +81,6 @@ public class SubDetect {
 
             contentPane.add(leftPane);
             contentPane.add(rightPane);
-
-            videoViewer = new VideoViewer(ocr, progressPanel);
-            xTablePanel = new XTablePanel();
 
             leftPane.add(videoViewer, BorderLayout.CENTER);
             rightPane.add(xTablePanel, BorderLayout.CENTER);
@@ -105,7 +108,6 @@ public class SubDetect {
                     validate.addTextValidationListener(new TextValidationListener() {
                         @Override
                         public void subtitlesReady(TextValidationEvent event) {
-                            System.out.println("OUT: " + (event.getEvents().size()));
                             for(SubtitleEvent subtitleEvent : event.getEvents()){
                                 xTablePanel.addSubtitle(subtitleEvent);
                             }
@@ -156,6 +158,29 @@ public class SubDetect {
             JSeparator sep01 = new JSeparator(JSeparator.VERTICAL);
             toolBar.add(sep01);
 
+            JComboBox<BlockArea> cbAreas = new JComboBox<>();
+            cbAreas.addItem(new BlockArea(true, true, true));
+            cbAreas.addItem(new BlockArea(false, true, true));
+            cbAreas.addItem(new BlockArea(true, false, true));
+            cbAreas.addItem(new BlockArea(true, true, false));
+            cbAreas.addItem(new BlockArea(false, true, false));
+            cbAreas.addItem(new BlockArea(true, false, false));
+            cbAreas.addItem(new BlockArea(false, false, true));
+            lastBlockArea = cbAreas.getItemAt(0);
+            cbAreas.setRenderer(new BlockAreaRenderer());
+            cbAreas.addActionListener(e -> {
+                if(cbAreas.getSelectedItem() instanceof BlockArea ba){
+                    lastBlockArea = ba;
+                    videoViewer.setLastBlockArea(lastBlockArea);
+                }
+            });
+            cbAreas.setSelectedIndex(0);
+            cbAreas.setMaximumSize(new Dimension(85, 48));
+            toolBar.add(cbAreas);
+
+            JSeparator sep02 = new JSeparator(JSeparator.VERTICAL);
+            toolBar.add(sep02);
+
             ImageIcon iPlay = new ImageIcon(
                     Objects.requireNonNull(getClass()
                     .getResource("/images/48_timer_stuffs play.png")));
@@ -188,20 +213,30 @@ public class SubDetect {
             private BufferedImage image;
             private final FFMpeg ff;
 
+            private BlockArea lastBlockArea;
+
             public VideoViewer(OCR ocr, ProgressPanel progressPanel) {
                 image = null;
+                lastBlockArea = new BlockArea(true, true, true);
 
                 ff = new FFMpeg();
                 ff.addMediaListener(new VideoListener() {
                     @Override
                     public void videoFrameUpdated(VideoEvent event) {
-                        image = event.getImage();
+                        //image = event.getImage();
                         currentFrame = event.getFrame();
                         currentTime = event.getCurrentMicro();
                         fps = event.getFps();
 
                         // Create a cleaned image
-                        BufferedImage im = ImageCompute.compute(event.getImage(), Color.white, event.getImage().getWidth(), event.getImage().getHeight());
+                        BufferedImage im = ImageCompute.compute(
+                                event.getImage(),
+                                Color.white,
+                                event.getImage().getWidth(),
+                                event.getImage().getHeight(),
+                                lastBlockArea
+                        );
+                        image = im;
                         ocr.load(im, currentTime, currentFrame, ff.getMediaFrameCount());
 
                         progressPanel.updateValues(currentFrame + 1, ff.getMediaFrameCount());
@@ -230,6 +265,10 @@ public class SubDetect {
 
             public double getFps() {
                 return fps;
+            }
+
+            public void setLastBlockArea(BlockArea lastBlockArea) {
+                this.lastBlockArea = lastBlockArea;
             }
 
             public void open(){
