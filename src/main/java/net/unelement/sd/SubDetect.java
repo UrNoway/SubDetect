@@ -2,6 +2,9 @@ package net.unelement.sd;
 
 import com.formdev.flatlaf.FlatLightLaf;
 import net.unelement.sd.ffmpeg.*;
+import net.unelement.sd.ffmpeg.event.VideoEvent;
+import net.unelement.sd.ffmpeg.listener.VideoListener;
+import net.unelement.sd.grid.XTablePanel;
 import net.unelement.sd.image.ImageCompute;
 import net.unelement.sd.image.OCR;
 import net.unelement.sd.subtitle.SrtSubtitles;
@@ -16,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SubDetect {
     public static void main(String[] args) {
@@ -32,6 +36,7 @@ public class SubDetect {
 
         private final VideoViewer videoViewer;
         private final ProgressPanel progressPanel;
+        private final XTablePanel xTablePanel;
         private final OCR ocr;
         private final Map<Long, String> detected;
         private SubtitleEvent subtitleEvent;
@@ -58,7 +63,7 @@ public class SubDetect {
             getContentPane().add(progressPanel, BorderLayout.SOUTH);
 
             JPanel leftPane = new JPanel(new BorderLayout());
-            JPanel rightPane = new JPanel();
+            JPanel rightPane = new JPanel(new BorderLayout());
 
             leftPane.setBorder(new LineBorder(new Color(0, 0, 0, 33)));
             rightPane.setBorder(new LineBorder(new Color(0, 0, 0, 33)));
@@ -67,8 +72,10 @@ public class SubDetect {
             contentPane.add(rightPane);
 
             videoViewer = new VideoViewer(ocr, progressPanel);
+            xTablePanel = new XTablePanel();
 
             leftPane.add(videoViewer, BorderLayout.CENTER);
+            rightPane.add(xTablePanel, BorderLayout.CENTER);
 
             addWindowListener(new WindowAdapter() {
                 @Override
@@ -85,24 +92,6 @@ public class SubDetect {
                 String text = event.getText();
                 if(!text.isEmpty()){
                     detected.put(event.getMicroseconds(), text);
-                }
-            });
-
-            videoViewer.getFFMpeg().addMediaListener(new FFAdapter(){
-                @Override
-                public void endOfFile(EofEvent event) {
-                    JOptionPane.showMessageDialog(new JFrame(), "End of file");
-//                    JFileChooser chooser = new JFileChooser();
-//                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-//                    chooser.setDialogType(JFileChooser.SAVE_DIALOG);
-//                    chooser.setDialogTitle("Choose a file");
-//
-//                    int z = chooser.showSaveDialog(null);
-//                    if (z == JFileChooser.APPROVE_OPTION) {
-//                        String path = chooser.getSelectedFile().getAbsolutePath();
-//                        srtSubtitles.writeSRT(path);
-//                        srtSubtitles.getSubtitleEvents().clear();
-//                    }
                 }
             });
         }
@@ -183,9 +172,9 @@ public class SubDetect {
                 image = null;
 
                 ff = new FFMpeg();
-                ff.addMediaListener(new FFAdapter() {
+                ff.addMediaListener(new VideoListener() {
                     @Override
-                    public void updated(FFEvent event) {
+                    public void videoFrameUpdated(VideoEvent event) {
                         image = event.getImage();
                         currentFrame = event.getFrame();
                         currentTime = event.getCurrentMicro();
@@ -198,6 +187,10 @@ public class SubDetect {
                         progressPanel.updateValues(currentFrame + 1, ff.getMediaFrameCount());
 
                         repaint();
+
+                        if(currentFrame + 1 == ff.getMediaFrameCount()) {
+                            JOptionPane.showMessageDialog(null, "EOF");
+                        }
                     }
                 });
             }
@@ -272,7 +265,8 @@ public class SubDetect {
             private int frameCount;
 
             private final Thread thread;
-            private volatile boolean updateRequest;
+            private final AtomicBoolean working;
+            private final AtomicBoolean updated;
 
             public ProgressPanel(){
                 progressBar = new JProgressBar();
@@ -284,7 +278,8 @@ public class SubDetect {
                 progressBar.setMinimum(0);
                 currentFrame = 0;
                 frameCount = 0;
-                updateRequest = false;
+                working = new AtomicBoolean(true);
+                updated = new AtomicBoolean(false);
 
                 thread = new Thread(this);
                 thread.start();
@@ -319,6 +314,7 @@ public class SubDetect {
 
             public void dispose(){
                 if(thread != null && thread.isAlive()){
+                    working.set(false);
                     thread.interrupt();
                 }
             }
@@ -328,16 +324,16 @@ public class SubDetect {
                 lblTotalFrame.setText(Integer.toString(total));
                 currentFrame = cur;
                 frameCount = total;
-                updateRequest = true; // update JProgress
+                updated.set(true); // update JProgress
             }
 
             @Override
             public void run() {
-                while(true){
-                    if(updateRequest){
+                while(working.get()){
+                    if(updated.get()){
                         progressBar.setMaximum(frameCount);
                         progressBar.setValue(currentFrame);
-                        updateRequest = false;
+                        updated.set(false);
                     }
                 }
             }

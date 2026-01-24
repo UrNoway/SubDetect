@@ -1,4 +1,6 @@
-package net.unelement.sd.subtitle;
+package net.unelement.sd.subtitle.event;
+
+import net.unelement.sd.subtitle.SubtitleEvent;
 
 import java.util.List;
 

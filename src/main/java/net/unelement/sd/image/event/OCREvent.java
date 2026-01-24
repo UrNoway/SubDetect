@@ -1,4 +1,4 @@
-package net.unelement.sd.image;
+package net.unelement.sd.image.event;
 
 public class OCREvent {
 

@@ -1,4 +1,6 @@
-package net.unelement.sd.image;
+package net.unelement.sd.image.listener;
+
+import net.unelement.sd.image.event.OCREvent;
 
 import java.util.EventListener;
 

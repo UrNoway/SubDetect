@@ -1,5 +1,8 @@
 package net.unelement.sd.subtitle;
 
+import net.unelement.sd.subtitle.event.TextValidationEvent;
+import net.unelement.sd.subtitle.listener.TextValidationListener;
+
 import javax.swing.event.EventListenerList;
 import java.util.ArrayList;
 import java.util.List;

@@ -1,11 +1,16 @@
 package net.unelement.sd.ffmpeg;
 
+import net.unelement.sd.ffmpeg.event.EndEvent;
+import net.unelement.sd.ffmpeg.event.VideoEvent;
+import net.unelement.sd.ffmpeg.listener.EndOfProcessListener;
+import net.unelement.sd.ffmpeg.listener.VideoListener;
 import org.bytedeco.javacpp.Loader;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
 import org.bytedeco.javacv.Java2DFrameConverter;
 
+import javax.swing.*;
 import javax.swing.event.EventListenerList;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
@@ -15,11 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FFMpeg implements Runnable {
 
     private volatile Thread playThread;
-    private volatile boolean running;
+    private final AtomicBoolean working;
+    private final AtomicBoolean running;
     private volatile String media;
     private volatile long startTime;
     private volatile long endTime;
@@ -35,7 +42,8 @@ public class FFMpeg implements Runnable {
 
     public FFMpeg() {
         playThread = null;
-        running = false;
+        working = new AtomicBoolean(false);
+        running = new AtomicBoolean(false);
         media = null;
         startTime = -1L;
         endTime = -1L;
@@ -59,9 +67,9 @@ public class FFMpeg implements Runnable {
         if(path != null){
             grabber = new FFmpegFrameGrabber(path);
             try{
-                String ffprobe = Loader.load(org.bytedeco.ffmpeg.ffprobe.class);
+                String ffProbe = Loader.load(org.bytedeco.ffmpeg.ffprobe.class);
                 ProcessBuilder pb = new ProcessBuilder(
-                        ffprobe,
+                        ffProbe,
                         "-i", String.format("\"%s\"", path),
                         "-loglevel", "error",
                         "-select_streams", "v:0",
@@ -90,7 +98,10 @@ public class FFMpeg implements Runnable {
                 grabber.stop();
                 grabber.release();
             } catch (FrameGrabber.Exception e) {
-                System.err.println("Grabber has tried to be free! (free() at FFmpeg.java)");
+                JOptionPane.showMessageDialog(
+                        new JFrame(),
+                        "Grabber has tried to be free!\n(free() at FFmpeg.java)"
+                );
             }
         }
     }
@@ -100,20 +111,23 @@ public class FFMpeg implements Runnable {
         try{
             startThread();
         }catch(Exception _){
-            System.err.println("Something goes wrong when you are tried to play a media!");
+            JOptionPane.showMessageDialog(
+                    new JFrame(),
+                    "Something goes wrong when\nyou are tried to play a media!"
+            );
         }
     }
 
     public void pause(){
         if(media == null) return;
         if (playThread == null) return;
-        running = !running;
+        running.set(!running.get());
     }
 
     public void stop(){
         if(media == null) return;
         if (playThread == null) return;
-        running = false;
+        running.set(false);
     }
 
     public void setStartTime(long micros){
@@ -122,10 +136,6 @@ public class FFMpeg implements Runnable {
 
     public void setEndTime(long micros){
         endTime = micros;
-    }
-
-    public boolean isRunning() {
-        return running;
     }
 
     public List<Long> getKeyFrames() {
@@ -142,8 +152,8 @@ public class FFMpeg implements Runnable {
 
     @Override
     public void run() {
-        while(true){
-            if(running){
+        while(working.get()){
+            if(running.get()){
                 // It is bad the media loops.
                 // If you don't want to loop then consider modify.
                 doProcess();
@@ -154,18 +164,20 @@ public class FFMpeg implements Runnable {
     public void startThread() {
         stopThread();
         if(playThread == null || (playThread != null &&
-                (playThread.isInterrupted() || !running))){
+                (playThread.isInterrupted() || !running.get()))){
             if(playThread == null){
                 playThread = new Thread(this);
                 playThread.start();
             }
-            running = true;
+            working.set(true);
+            running.set(true);
         }
     }
 
     public void stopThread() {
         if(playThread != null && !playThread.isInterrupted()){
-            running = false;
+            running.set(false);
+            working.set(false);
             playThread.interrupt();
             playThread = null;
         }
@@ -181,7 +193,7 @@ public class FFMpeg implements Runnable {
             imageExecutor = Executors.newSingleThreadExecutor();
 
             while (!Thread.interrupted()) {
-                if(running){
+                if(running.get()){
 
                     positionCounter = Math.max(positionCounter, grabber.getFrameNumber());
                     if(grabber.getFrameNumber() < positionCounter){
@@ -205,6 +217,13 @@ public class FFMpeg implements Runnable {
                         break;
                     }
 
+//                    if(grabber.getFrameNumber() >= grabber.getLengthInVideoFrames()){
+//                        fireEndOfProcessEvent(new EndEvent(
+//                                grabber.getFrameNumber(),
+//                                grabber.getTimestamp())
+//                        );
+//                    }
+
                     //==============================================
                     // DESIRED END TRIGGER - AREA START
                     //==============================================
@@ -212,7 +231,7 @@ public class FFMpeg implements Runnable {
                             && !playThread.isInterrupted() && endTime != -1L){
                         if(frame.timestamp >= endTime){
                             endTime = -1L;
-                            running = false;
+                            running.set(false);
                             continue;
                         }
                     }
@@ -230,13 +249,13 @@ public class FFMpeg implements Runnable {
                             // EVENT TRIGGER - AREA START
                             //==============================================
 
-                            FFEvent m = new FFEvent(
+                            VideoEvent m = new VideoEvent(
                                     imageFrame.timestamp,
                                     grabber.getFrameRate(),
                                     image
                             );
 
-                            fireMediaEvent(m);
+                            fireVideoUpdateEvent(m);
 
                             //==============================================
                             // EVENT TRIGGER - AREA END
@@ -266,27 +285,34 @@ public class FFMpeg implements Runnable {
         return listeners.getListenerList();
     }
 
-    public void addMediaListener(FFListener listener){
-        listeners.add(FFListener.class, listener);
+    public void addMediaListener(Object o){
+        switch(o){
+            case VideoListener x -> listeners.add(VideoListener.class, x);
+            case EndOfProcessListener x -> listeners.add(EndOfProcessListener.class, x);
+            default -> {}
+        }
+    }
+    public void removeMediaListener(Object o){
+        switch(o){
+            case VideoListener x -> listeners.remove(VideoListener.class, x);
+            case EndOfProcessListener x -> listeners.remove(EndOfProcessListener.class, x);
+            default -> {}
+        }
     }
 
-    public void removeMediaListener(FFListener listener){
-        listeners.remove(FFListener.class, listener);
-    }
-
-    protected void fireMediaEvent(FFEvent message){
+    protected void fireVideoUpdateEvent(VideoEvent message){
         for(Object o : getListeners()){
-            if(o instanceof FFListener listen){
-                listen.updated(message);
+            if(o instanceof VideoListener listen){
+                listen.videoFrameUpdated(message);
                 break;
             }
         }
     }
 
-    protected void fireEofEvent(EofEvent message){
+    protected void fireEndOfProcessEvent(EndEvent message){
         for(Object o : getListeners()){
-            if(o instanceof FFListener listen){
-                listen.endOfFile(message);
+            if(o instanceof EndOfProcessListener listen){
+                listen.endReached(message);
                 break;
             }
         }

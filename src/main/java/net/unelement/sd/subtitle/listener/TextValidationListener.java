@@ -1,4 +1,6 @@
-package net.unelement.sd.subtitle;
+package net.unelement.sd.subtitle.listener;
+
+import net.unelement.sd.subtitle.event.TextValidationEvent;
 
 import java.util.EventListener;
 

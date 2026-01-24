@@ -1,5 +1,7 @@
 package net.unelement.sd.image;
 
+import net.unelement.sd.image.event.OCREvent;
+import net.unelement.sd.image.listener.OCRListener;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacv.Java2DFrameConverter;
 import org.bytedeco.javacv.LeptonicaFrameConverter;
