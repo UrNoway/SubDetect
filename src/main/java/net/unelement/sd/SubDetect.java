@@ -9,6 +9,9 @@ import net.unelement.sd.image.ImageCompute;
 import net.unelement.sd.image.OCR;
 import net.unelement.sd.subtitle.SrtSubtitles;
 import net.unelement.sd.subtitle.SubtitleEvent;
+import net.unelement.sd.subtitle.TextValidation;
+import net.unelement.sd.subtitle.event.TextValidationEvent;
+import net.unelement.sd.subtitle.listener.TextValidationListener;
 
 import javax.swing.*;
 import javax.swing.border.LineBorder;
@@ -17,6 +20,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,6 +45,7 @@ public class SubDetect {
         private final Map<Long, String> detected;
         private SubtitleEvent subtitleEvent;
         private final SrtSubtitles srtSubtitles;
+        private TextValidation validate;
 
         public SubDetectFrame() {
             setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -92,6 +97,21 @@ public class SubDetect {
                 String text = event.getText();
                 if(!text.isEmpty()){
                     detected.put(event.getMicroseconds(), text);
+                }
+
+                // End of file reached
+                if(event.getCurrentFrame() + 1 == event.getFrameCount()){
+                    validate = new TextValidation(detected);
+                    validate.addTextValidationListener(new TextValidationListener() {
+                        @Override
+                        public void subtitlesReady(TextValidationEvent event) {
+                            System.out.println("OUT: " + (event.getEvents().size()));
+//                            for(SubtitleEvent subtitleEvent : event.getEvents()){
+//                                xTablePanel.addSubtitle(subtitleEvent);
+//                            }
+                        }
+                    });
+                    validate.start();
                 }
             });
         }
@@ -190,6 +210,7 @@ public class SubDetect {
 
                         if(currentFrame + 1 == ff.getMediaFrameCount()) {
                             JOptionPane.showMessageDialog(null, "EOF");
+
                         }
                     }
                 });
