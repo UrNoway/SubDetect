@@ -33,7 +33,7 @@ public class SrtSubtitles {
         }
     }
 
-    private String getTime(long microseconds){
+    public static String getTime(long microseconds){
         long msTime = microseconds % 1000;
         int hh = (int)(msTime / 3600000d);
         int mm = (int)((msTime - 3600000d * hh) / 60000d);

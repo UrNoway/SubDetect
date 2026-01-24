@@ -1,5 +1,6 @@
 package net.unelement.sd.grid;
 
+import net.unelement.sd.subtitle.SrtSubtitles;
 import net.unelement.sd.subtitle.SubtitleEvent;
 
 import javax.swing.table.DefaultTableModel;
@@ -26,11 +27,6 @@ public class XTableModel extends DefaultTableModel {
     @Override
     public int getRowCount() {
         return subtitleEvents == null ? 0 : subtitleEvents.size();
-    }
-
-    @Override
-    public Object getValueAt(int rowIndex, int columnIndex) {
-        return subtitleEvents.get(rowIndex);
     }
 
     @Override
@@ -64,14 +60,32 @@ public class XTableModel extends DefaultTableModel {
     }
 
     @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-        if(aValue instanceof SubtitleEvent event){
-            if(subtitleEvents.size() > rowIndex){
-                subtitleEvents.add(event);
-            }else{
-                subtitleEvents.set(rowIndex, event);
-            }
+    public Object getValueAt(int rowIndex, int columnIndex) {
+        Object obj = null;
+
+        switch(columnIndex){
+            case 0 -> obj = subtitleEvents.get(rowIndex).isSelected();
+            case 1 -> obj = subtitleEvents.get(rowIndex).getMicrosStart();
+            case 2 -> obj = subtitleEvents.get(rowIndex).getMicrosEnd();
+            case 3 -> obj = subtitleEvents.get(rowIndex).getText();
         }
+
+        return obj;
+    }
+
+    @Override
+    public void setValueAt(Object v, int rowIndex, int columnIndex) {
+        SubtitleEvent event = subtitleEvents.get(rowIndex);
+
+        switch(columnIndex){
+            case 0 -> { if(v instanceof Boolean x) event.setSelected(x); }
+            case 1 -> { if(v instanceof Long x) event.setMicrosStart(x); }
+            case 2 -> { if(v instanceof Long x) event.setMicrosEnd(x); }
+            case 3 -> { if(v instanceof String x) event.setText(x); }
+        }
+
+        subtitleEvents.set(rowIndex, event);
+        fireTableCellUpdated(rowIndex, columnIndex);
     }
 
     public void removeAtRow(int row){

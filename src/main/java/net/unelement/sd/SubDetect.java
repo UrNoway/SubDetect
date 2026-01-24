@@ -106,9 +106,9 @@ public class SubDetect {
                         @Override
                         public void subtitlesReady(TextValidationEvent event) {
                             System.out.println("OUT: " + (event.getEvents().size()));
-//                            for(SubtitleEvent subtitleEvent : event.getEvents()){
-//                                xTablePanel.addSubtitle(subtitleEvent);
-//                            }
+                            for(SubtitleEvent subtitleEvent : event.getEvents()){
+                                xTablePanel.addSubtitle(subtitleEvent);
+                            }
                         }
                     });
                     validate.start();
