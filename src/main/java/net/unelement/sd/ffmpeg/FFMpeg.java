@@ -54,10 +54,6 @@ public class FFMpeg implements Runnable {
         converter = new Java2DFrameConverter();
     }
 
-    public boolean isReady(){
-        return media != null;
-    }
-
     public void setMedia(String path){
         media = path;
         if(grabber != null){

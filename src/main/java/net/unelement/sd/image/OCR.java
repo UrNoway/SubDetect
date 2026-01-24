@@ -10,8 +10,9 @@ import org.bytedeco.tesseract.TessBaseAPI;
 
 import javax.swing.event.EventListenerList;
 import java.awt.image.BufferedImage;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.bytedeco.leptonica.global.leptonica.pixDestroy;
+// import static org.bytedeco.leptonica.global.leptonica.pixDestroy;
 
 public class OCR implements Runnable {
 
@@ -20,10 +21,10 @@ public class OCR implements Runnable {
 
     private final TessBaseAPI api;
     private BytePointer outText;
-    private PIX pix;
 
     private volatile Thread thread;
-    private volatile boolean running;
+    private final AtomicBoolean working;
+    private final AtomicBoolean running;
 
     private final String tessPath;
     private final String lang;
@@ -38,7 +39,8 @@ public class OCR implements Runnable {
         this.tessPath = tessPath;
         this.lang = lang;
 
-        running = false;
+        working = new AtomicBoolean(false);
+        running = new AtomicBoolean(false);
         done = true;
         image = null;
 
@@ -50,19 +52,23 @@ public class OCR implements Runnable {
     }
 
     public void startThread() {
-        running = true;
+        working.set(true);
+        running.set(true);
         thread = new Thread(this);
         thread.start();
     }
 
     private void stopThread() {
         if(thread != null && thread.isAlive()) {
+            working.set(false);
+            running.set(false);
             thread.interrupt();
         }
     }
 
     public void interruptThread() {
-        running = false;
+        running.set(false);
+        working.set(false);
     }
 
     public boolean init(){
@@ -86,7 +92,12 @@ public class OCR implements Runnable {
 
         done = true;
 
-        if(!running){
+        // Pointer address is NULL for pix
+        // Cn cause 'double free or corrupted (out)' in leptonica
+        // Caution with your memory
+        // pixDestroy(pix);
+
+        if(!running.get()){
             stopThread();
         }
     }
@@ -95,14 +106,13 @@ public class OCR implements Runnable {
         api.End();
         if(outText != null){
             outText.deallocate();
-            pixDestroy(pix); // <- cause double free or corrupted (out) in leptonica
         }
     }
 
     @Override
     public void run() {
-        while(true){
-            if(running && !done){
+        while(working.get()){
+            if(running.get() && !done){
                 doWork();
             }
         }
@@ -122,10 +132,6 @@ public class OCR implements Runnable {
 
     public void addOcrListener(OCRListener listener){
         listeners.add(OCRListener.class, listener);
-    }
-
-    public void removeOcrListener(OCRListener listener){
-        listeners.remove(OCRListener.class, listener);
     }
 
     protected void fireOcrEvent(OCREvent message){
