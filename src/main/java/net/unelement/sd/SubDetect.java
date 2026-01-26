@@ -22,7 +22,6 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,7 +103,7 @@ public class SubDetect {
 
                 // End of file reached
                 if(event.getCurrentFrame() + 1 == event.getFrameCount()){
-                    validate = new TextValidation(detected);
+                    validate = new TextValidation(detected, videoViewer.getFps());
                     validate.addTextValidationListener(new TextValidationListener() {
                         @Override
                         public void subtitlesReady(TextValidationEvent event) {

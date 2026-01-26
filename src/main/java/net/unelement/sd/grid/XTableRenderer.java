@@ -17,7 +17,7 @@ public class XTableRenderer extends JLabel implements TableCellRenderer {
                                                    boolean isSelected, boolean hasFocus, int row, int column) {
 
         if(value instanceof Long x){
-            setText(Long.toString(x / 1_000L));
+            setText(SrtSubtitles.getTime(x));
         }
 
         return this;

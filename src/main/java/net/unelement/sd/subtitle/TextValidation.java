@@ -4,30 +4,26 @@ import net.unelement.sd.subtitle.event.TextValidationEvent;
 import net.unelement.sd.subtitle.listener.TextValidationListener;
 
 import javax.swing.event.EventListenerList;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class TextValidation implements Runnable {
 
     private volatile boolean running;
     private Thread thread;
 
+    private final double fps;
+
     private final Map<Long, String> detected;
     private final List<SubtitleEvent> events;
 
-    private long lastTime;
-    private long lastStartTime;
-    private long lastEndTime;
-    private String lastString;
+    private SubtitleEvent lastEvent;
 
-    public TextValidation(Map<Long, String> detected) {
+    public TextValidation(Map<Long, String> detected, double fps) {
         this.detected = detected;
+        this.fps = fps;
         events = new ArrayList<>();
-        lastTime = -1L;
-        lastStartTime = -1L;
-        lastEndTime = -1L;
-        lastString = "";
+        lastEvent = null;
     }
 
     public void start() {
@@ -50,29 +46,40 @@ public class TextValidation implements Runnable {
     }
 
     public void process(){
-        for(Map.Entry<Long, String> entry : detected.entrySet()) {
-            if(entry.getKey() > lastTime) {
-                if(similarity(lastString, entry.getValue()) < .8d){
-                    if(lastString.isEmpty()) {
-                        // New element
-                        lastStartTime = entry.getKey();
-                        lastString = entry.getValue();
-                    }else{
-                        // Old element
-                        lastEndTime = entry.getKey();
+        // Sort the map
+        Map<Long, String> sorted = new TreeMap<>(detected);
 
-                        SubtitleEvent event = new SubtitleEvent();
-                        event.setMicrosStart(lastStartTime);
-                        event.setMicrosEnd(lastEndTime);
-                        event.setText(lastString);
-                        events.add(event);
+        // Count the frames
+        int counter = 0;
 
-                        lastString = "";
-                    }
+        // Register last text
+        String lastStringInMap = "";
+
+        // Correction for end of events (event time ends by wrong value)
+        // So we have to add one frame (corresponding in microseconds)
+        long correction = Math.round(1d / fps * 1_000_000d);
+
+        // Add to list by applying filter
+        for(Map.Entry<Long, String> entry : sorted.entrySet()){
+            if(!entry.getValue().trim().equals(lastStringInMap)){
+                if (lastEvent != null){
+                    events.add(lastEvent);
                 }
-
-                lastTime = entry.getKey();
+                if(!entry.getValue().trim().isEmpty()){
+                    lastEvent = new SubtitleEvent();
+                    lastEvent.setText(entry.getValue().trim());
+                    lastEvent.setMicrosStart(entry.getKey());
+                }
+            }else if(detected.size() - 1 == counter && lastEvent != null){
+                lastEvent.setMicrosEnd(lastEvent.getMicrosEnd() + correction);
+                events.add(lastEvent);
+            }else{
+                if(lastEvent != null){
+                    lastEvent.setMicrosEnd(entry.getKey() + correction);
+                }
             }
+            lastStringInMap = entry.getValue().trim();
+            counter++;
         }
 
         stopThread();
